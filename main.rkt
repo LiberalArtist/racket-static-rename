@@ -14,7 +14,7 @@
   (syntax-parse stx
     [(_ name:id header:function-header . rest)
      #`(define header.name
-         (let ([name (λ header.params . rest)])
+         (let ([name (λ header.args . rest)])
            name))]))
 
 (module+ test
@@ -25,6 +25,13 @@
      (+ a b))
 
    (check-equal? (foo 10 20) 30)
+   (check-equal? (object-name foo) 'bar))
+
+  (test-case "it can define functions with rest arguments"
+   (define/renamed bar (foo a . rest)
+     (cons a (apply + rest)))
+
+   (check-equal? (foo 'nums 1 2 3) '(nums . 6))
    (check-equal? (object-name foo) 'bar))
 
   (test-case "the renamed function is not in scope inside the function body"

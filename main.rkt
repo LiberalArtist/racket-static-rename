@@ -4,39 +4,63 @@
                      syntax/parse
                      syntax/parse/lib/function-header))
 
-(provide define/renamed)
+(provide static-rename define/renamed)
 
-(define-syntax (define/renamed stx)
-  (define (replace-function-name name header)
-    (syntax-parse header
-      [(_:id . args) #`(#,name . args)]
-      [(header . args) #`(#,(replace-function-name name #'header) . args)]))
-  (syntax-parse stx
-    [(_ name:id header:function-header . rest)
-     #`(define header.name
-         (let ([name (λ header.args . rest)])
-           name))]))
+(define-syntax static-rename
+  (syntax-parser
+    [(_ inferred-name:id expr:expr)
+     #'(let ([inferred-name expr]) inferred-name)]))
+
+(define-syntax define/renamed
+  (syntax-parser
+    [(_ inferred-name:id name:id expr:expr)
+     #'(define name (static-rename inferred-name expr))]
+    [(_ inferred-name:id header:function-header body:expr ...+)
+     #'(define/renamed inferred-name header.name (λ header.args body ...))]))
 
 (module+ test
-  (require rackunit)
+  (require rackunit
+           rackunit/spec)
 
-  (test-case "it defines functions with custom dynamic names"
-   (define/renamed bar (foo a b)
-     (+ a b))
+  (define-syntax inferred-name
+    (syntax-parser
+      [(_) #`'#,(syntax-local-name)]))
 
-   (check-equal? (foo 10 20) 30)
-   (check-equal? (object-name foo) 'bar))
+  (describe "static-rename"
+    (it "adjusts the inferred name of expressions"
+      (check-equal? (static-rename external (inferred-name)) 'external)
+      (check-equal? (object-name (static-rename external (λ (x) x))) 'external))
 
-  (test-case "it can define functions with rest arguments"
-   (define/renamed bar (foo a . rest)
-     (cons a (apply + rest)))
+    (it "overrides normally-inferred names"
+      (check-equal? (let ([internal (static-rename external (inferred-name))])
+                      internal)
+                    'external)
+      (check-equal? (let ([internal (static-rename external (λ (x) x))])
+                      (object-name internal))
+                    'external)))
 
-   (check-equal? (foo 'nums 1 2 3) '(nums . 6))
-   (check-equal? (object-name foo) 'bar))
+  (describe "define/renamed"
+    (it "defines expressions with adjusted inferred names"
+      (define/renamed external internal (inferred-name))
+      (check-equal? internal 'external))
 
-  (test-case "the renamed function is not in scope inside the function body"
-   (define (bar) 42)
-   (define/renamed bar (foo) (bar))
+    (it "defines functions with adjusted inferred names"
+      (define/renamed bar (foo a b)
+        (+ a b))
 
-   (check-equal? (foo) 42)
-   (check-equal? (object-name foo) 'bar)))
+      (check-equal? (foo 10 20) 30)
+      (check-equal? (object-name foo) 'bar))
+
+    (it "defines functions with rest arguments"
+      (define/renamed bar (foo a . rest)
+        (cons a (apply + rest)))
+
+      (check-equal? (foo 'nums 1 2 3) '(nums . 6))
+      (check-equal? (object-name foo) 'bar))
+
+    (it "defines functions without the adjusted name being in scope"
+      (define (bar) 42)
+      (define/renamed bar (foo) (bar))
+
+      (check-equal? (foo) 42)
+      (check-equal? (object-name foo) 'bar))))

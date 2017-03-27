@@ -20,7 +20,11 @@ before_install:
   - export PATH="${RACKET_DIR}/bin:${PATH}"
 
 install:
-  - raco pkg install -in static-rename --auto --link $TRAVIS_BUILD_DIR
+  - raco pkg install -i --auto --link
+      $TRAVIS_BUILD_DIR/static-rename
+      $TRAVIS_BUILD_DIR/static-rename-doc
+      $TRAVIS_BUILD_DIR/static-rename-lib
+      $TRAVIS_BUILD_DIR/static-rename-test
 
 script:
-  - raco test -ep static-rename
+  - raco test -ep static-rename-lib static-rename-test
